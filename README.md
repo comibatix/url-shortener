@@ -85,7 +85,8 @@ url-shortener/
 │   └── package.json
 ├── screenshots.pdf         # Скриншоты работы приложения
 └── README.md
-``` 
+```
+
 ---
 
 ## Как запустить проект локально
@@ -99,35 +100,36 @@ url-shortener/
 
 1. Клонируйте репозиторий:
 
-```bash
+bash
 git clone <ссылка-на-репозиторий>
 cd url-shortener
 
 2. Установите зависимости для сервера:
-cd server
-npm install
+   cd server
+   npm install
 
 3. Создайте файл server/.env с переменными окружения:
-PORT=5000
-MONGO_URI=mongodb://localhost:27017/url-shortener
-JWT_SECRET=your_super_secret_key_change_this
+   PORT=5000
+   MONGO_URI=mongodb://localhost:27017/url-shortener
+   JWT_SECRET=your_super_secret_key_change_this
 
 4.Установите зависимости для клиента:
 cd ../client
 npm install
 
 Запуск
+
 1. Запустите сервер (в первом терминале):
-cd server
-node index.js
-Сервер запустится на http://localhost:5000
+   cd server
+   node index.js
+   Сервер запустится на http://localhost:5000
 
 2. Запустите клиент (во втором терминале):
-cd client
-npm run dev
-Приложение откроется на http://localhost:5173
+   cd client
+   npm run dev
+   Приложение откроется на http://localhost:5173
 
- API Endpoints
+API Endpoints
 Авторизация
 POST /api/auth/register — регистрация нового пользователя
 POST /api/auth/login — вход в систему
@@ -151,4 +153,3 @@ Material UI ThemeProvider позволяет переключать темы с 
 
 Автор
 Проект разработан в рамках обучения fullstack-разработке.
-```
