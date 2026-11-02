@@ -65,28 +65,26 @@
 
 ---
 
-## Структура проекта
-
+```text
 url-shortener/
-├── client/ # Frontend (React + Vite)
-│ ├── src/
-│ │ ├── components/ # Переиспользуемые компоненты (Navbar)
-│ │ ├── pages/ # Страницы (Home, Login, Register, Dashboard, Stats)
-│ │ ├── store/ # Redux store (authSlice, linksSlice)
-│ │ ├── api.js # API-запросы к серверу
-│ │ ├── theme.js # Темы MUI (светлая и тёмная)
-│ │ ├── App.jsx # Корневой компонент с роутингом
-│ │ └── main.jsx # Точка входа
-│ └── package.json
-├── server/ # Backend (Node.js + Express)
-│ ├── models/ # Mongoose модели (User, Link)
-│ ├── routes/ # Роуты (auth, links)
-│ ├── middleware/ # Middleware (auth)
-│ ├── index.js # Точка входа сервера
-│ └── package.json
-├── screenshots.pdf # Скриншоты работы приложения
+├── client/                 # Frontend (React + Vite)
+│   ├── src/
+│   │   ├── components/     # Переиспользуемые компоненты (Navbar)
+│   │   ├── pages/          # Страницы (Home, Login, Register, Dashboard, Stats)
+│   │   ├── store/          # Redux store (authSlice, linksSlice)
+│   │   ├── api.js          # API-запросы к серверу
+│   │   ├── theme.js        # Темы MUI (светлая и тёмная)
+│   │   ├── App.jsx         # Корневой компонент с роутингом
+│   │   └── main.jsx        # Точка входа
+│   └── package.json
+├── server/                 # Backend (Node.js + Express)
+│   ├── models/             # Mongoose модели (User, Link)
+│   ├── routes/             # Роуты (auth, links)
+│   ├── middleware/         # Middleware (auth)
+│   ├── index.js            # Точка входа сервера
+│   └── package.json
+├── screenshots.pdf         # Скриншоты работы приложения
 └── README.md
-
 ---
 
 ## Как запустить проект локально
