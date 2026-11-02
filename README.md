@@ -85,6 +85,7 @@ url-shortener/
 │   └── package.json
 ├── screenshots.pdf         # Скриншоты работы приложения
 └── README.md
+``` 
 ---
 
 ## Как запустить проект локально
