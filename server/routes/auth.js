@@ -1,77 +1,101 @@
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
-// POST /api/auth/register — регистрация
+// Валидация email
+const isValidEmail = (email) => {
+  return typeof email === 'string' && 
+         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+// Регистрация
 router.post('/register', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Пользователь с таким email уже существует' });
+    // ВАЛИДАЦИЯ: проверяем, что email — строка
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Email должен быть строкой' });
     }
 
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'Некорректный email' });
+    }
+
+    // Приводим к нижнему регистру
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Проверяем длину пароля
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ error: 'Пароль должен быть минимум 6 символов' });
+    }
+
+    // Проверяем, существует ли пользователь
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Пользователь уже существует' });
+    }
+
+    // Хэшируем пароль
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Создаем пользователя
     const user = new User({
-      email,
-      password
+      email: normalizedEmail,
+      password: hashedPassword
     });
 
-    await user.hashPassword();
     await user.save();
 
-    const token = jwt.sign(
-      { userId: user._id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    res.status(201).json({
-      message: 'Пользователь создан',
-      token,
-      user: {
-        id: user._id,
-        email: user.email
-      }
-    });
+    res.status(201).json({ message: 'Пользователь создан' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Ошибка регистрации:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// POST /api/auth/login — вход
+// Логин
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    // ВАЛИДАЦИЯ: проверяем, что email — строка
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Email должен быть строкой' });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'Некорректный email' });
+    }
+
+    // Приводим к нижнему регистру
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Ищем пользователя
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      return res.status(401).json({ error: 'Неверный email или пароль' });
+      return res.status(400).json({ error: 'Неверный email или пароль' });
     }
 
-    const isPasswordValid = await user.comparePassword(password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Неверный email или пароль' });
+    // Проверяем пароль
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Неверный email или пароль' });
     }
 
+    // Создаем JWT токен
     const token = jwt.sign(
-      { userId: user._id, email: user.email },
+      { userId: user._id },
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '7d' }
     );
 
-    res.json({
-      message: 'Вход выполнен',
-      token,
-      user: {
-        id: user._id,
-        email: user.email
-      }
-    });
+    res.json({ token, userId: user._id });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Ошибка логина:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 

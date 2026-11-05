@@ -114,7 +114,7 @@ router.get('/:shortCode', async (req, res) => {
 });
 
 // Публичная статистика — только агрегаты, БЕЗ IP и user-agent
-router.get('/:shortCode+', async (req, res) => {
+router.get('/:shortCode/stats', async (req, res) => {
   try {
     const link = await Link.findOne({ shortCode: req.params.shortCode });
     
