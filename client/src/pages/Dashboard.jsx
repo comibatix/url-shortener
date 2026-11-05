@@ -36,9 +36,10 @@ function Dashboard() {
     dispatch(fetchLinks(searchQuery));
   }, [dispatch, searchQuery]);
 
-  const handleDelete = async (shortCode) => {
+  // ✅ ИСПРАВЛЕНО: принимаем id вместо shortCode
+  const handleDelete = async (id) => {
     if (!window.confirm('Удалить ссылку?')) return;
-    dispatch(removeLink(shortCode));
+    dispatch(removeLink(id));
     toast.success('Ссылка удалена');
   };
 
@@ -100,7 +101,7 @@ function Dashboard() {
                     Оригинал: {link.originalUrl}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Кликов: {link.clicks ? link.clicks.length : 0} | Создана: {new Date(link.createdAt).toLocaleString('ru-RU')}
+                    Кликов: {link.totalClicks || 0} | Создана: {new Date(link.createdAt).toLocaleString('ru-RU')}
                   </Typography>
                   {link.expiresAt && (
                     <Alert severity="warning" sx={{ mb: 2, py: 0.5 }} icon={<AccessTimeIcon />}>
@@ -126,7 +127,7 @@ function Dashboard() {
                     <Button 
                       variant="contained" 
                       startIcon={<DeleteIcon />}
-                      onClick={() => handleDelete(link.shortCode)}
+                      onClick={() => handleDelete(link._id)} //  ИСПРАВЛЕНО: передаём link._id
                       color="error"
                     >
                       Удалить

@@ -20,10 +20,11 @@ export const addLink = createAsyncThunk('links/addLink', async ({ originalUrl, c
   }
 });
 
-export const removeLink = createAsyncThunk('links/removeLink', async (shortCode, { rejectWithValue }) => {
+// ✅ ИСПРАВЛЕНО: принимаем id вместо shortCode
+export const removeLink = createAsyncThunk('links/removeLink', async (id, { rejectWithValue }) => {
   try {
-    await deleteLink(shortCode);
-    return shortCode;
+    await deleteLink(id);
+    return id;
   } catch (error) {
     return rejectWithValue(error.message);
   }
@@ -89,9 +90,10 @@ const linksSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
+      // ✅ ИСПРАВЛЕНО: фильтруем по _id вместо shortCode
       .addCase(removeLink.fulfilled, (state, action) => {
         state.loading = false;
-        state.links = state.links.filter(l => l.shortCode !== action.payload);
+        state.links = state.links.filter(l => l._id !== action.payload);
       })
       .addCase(removeLink.rejected, (state, action) => {
         state.loading = false;

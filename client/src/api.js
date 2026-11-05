@@ -52,8 +52,8 @@ export const getLinks = (url = '/api/links') =>
 export const getLinkStats = (shortCode) => 
   request(`/api/links/${shortCode}`);
 
-export const deleteLink = (shortCode) => 
-  request(`/api/links/${shortCode}`, {
+export const deleteLink = (id) => 
+  request(`/api/links/${id}`, {
     method: 'DELETE',
   });
 

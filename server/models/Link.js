@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const linkSchema = new mongoose.Schema({
   originalUrl: { type: String, required: true },
-  shortCode: { type: String, required: true, unique: true },
+  shortCode: { type: String, required: true }, // ⚠️ Убрали unique: true отсюда
   totalClicks: {
     type: Number,
     default: 0
@@ -12,13 +12,13 @@ const linkSchema = new mongoose.Schema({
     default: true
   },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  clicks: [], // Оставляем пустым для обратной совместимости, но не используем
   createdAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, default: null },
   customCode: { type: Boolean, default: false }
 });
 
-// TTL-индекс ЗАКОММЕНТИРОВАН — чтобы статистика не удалялась вместе со ссылкой
-// linkSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// ✅ Частичный уникальный индекс: shortCode уникален ТОЛЬКО среди активных ссылок
+// Это позволяет переиспользовать код после того, как старая ссылка стала неактивной
+linkSchema.index({ shortCode: 1 }, { unique: true, partialFilterExpression: { isActive: true } });
 
 module.exports = mongoose.model('Link', linkSchema);
