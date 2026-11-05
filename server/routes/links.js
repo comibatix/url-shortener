@@ -1,131 +1,179 @@
 const express = require('express');
 const router = express.Router();
 const Link = require('../models/Link');
-const crypto = require('crypto');
-const authMiddleware = require('../middleware/auth');
+const Click = require('../models/Click');
+const UAParser = require('ua-parser-js');
 
-// POST /api/links - создание короткой ссылки
-router.post('/', authMiddleware, async (req, res) => {
+// Получить все ссылки пользователя (для дашборда)
+router.get('/', async (req, res) => {
   try {
-    const { originalUrl, customCode, expiresIn } = req.body;
-
-    if (!originalUrl) {
-      return res.status(400).json({ error: 'URL обязателен' });
-    }
-
-    let shortCode;
-    let isCustom = false;
-
-    if (customCode && customCode.trim() !== '') {
-      shortCode = customCode.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
-      
-      if (!shortCode) {
-        return res.status(400).json({ 
-          error: 'Кастомный код должен содержать только латинские буквы (a-z), цифры (0-9) и дефис (-)' 
-        });
-      }
-      
-      const existing = await Link.findOne({ shortCode });
-      if (existing) {
-        return res.status(400).json({ error: 'Этот код уже занят' });
-      }
-      isCustom = true;
-    } else {
-      shortCode = crypto.randomBytes(3).toString('hex');
-    }
-
-    let expiresAt = null;
-    if (expiresIn && expiresIn > 0) {
-      expiresAt = new Date(Date.now() + expiresIn * 24 * 60 * 60 * 1000);
-    }
-
-    const link = new Link({
-      originalUrl,
-      shortCode,
-      userId: req.user.userId,
-      customCode: isCustom,
-      expiresAt
-    });
-
-    await link.save();
-
-    // ✅ ВАЖНО: возвращаем originalUrl в ответе!
-    res.json({
-      originalUrl: originalUrl,
-      shortUrl: `http://localhost:5000/${shortCode}`,
-      statsUrl: `http://localhost:5000/${shortCode}+`,
-      shortCode,
-      customCode: isCustom,
-      expiresAt
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET /api/links - получить все ссылки пользователя
-router.get('/', authMiddleware, async (req, res) => {
-  try {
-    const { search } = req.query;
-    
-    let query = { userId: req.user.userId };
-    
-    if (search && search.trim() !== '') {
-      const searchRegex = new RegExp(search.trim(), 'i');
-      query.$or = [
-        { originalUrl: searchRegex },
-        { shortCode: searchRegex }
-      ];
-    }
-
-    const links = await Link.find(query).sort({ createdAt: -1 });
+    const links = await Link.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.json(links);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// GET /api/links/:shortCode - получить статистику
-router.get('/:shortCode', authMiddleware, async (req, res) => {
+// Создать новую ссылку
+router.post('/', async (req, res) => {
   try {
-    const link = await Link.findOne({ 
-      shortCode: req.params.shortCode,
-      userId: req.user.userId
+    const { originalUrl, customCode, expiresAt } = req.body;
+    
+    const shortCode = customCode || Math.random().toString(36).substring(2, 8);
+    
+    const link = new Link({
+      userId: req.user.id,
+      originalUrl,
+      shortCode,
+      customCode: !!customCode,
+      expiresAt: expiresAt ? new Date(expiresAt) : null
+    });
+    
+    await link.save();
+    res.status(201).json(link);
+  } catch (error) {
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Редирект по короткой ссылке
+router.get('/:shortCode', async (req, res) => {
+  try {
+    const link = await Link.findOne({ shortCode: req.params.shortCode });
+    
+    if (!link || !link.isActive) {
+      return res.status(410).send('Ссылка неактивна или истекла');
+    }
+
+    // Проверяем срок действия
+    if (link.expiresAt && link.expiresAt < new Date()) {
+      await Link.updateOne({ _id: link._id }, { isActive: false });
+      return res.status(410).send('Ссылка истекла');
+    }
+
+    // Получаем IP
+    const ip = req.ip || req.connection.remoteAddress;
+
+    // Парсим User-Agent
+    const parser = new UAParser(req.headers['user-agent']);
+    const ua = parser.getResult();
+
+    // Создаем клик в ОТДЕЛЬНОЙ коллекции
+    const click = new Click({
+      linkId: link._id,
+      ip: ip,
+      browser: `${ua.browser.name || 'Unknown'} ${ua.browser.version || ''}`.trim(),
+      os: `${ua.os.name || 'Unknown'} ${ua.os.version || ''}`.trim(),
+      device: ua.device.type || 'desktop',
+      userAgent: req.headers['user-agent']?.substring(0, 500) || ''
     });
 
+    // Сохраняем клик асинхронно (не блокируем редирект)
+    click.save().catch(err => console.error('Ошибка сохранения клика:', err));
+
+    // Получаем геолокацию с таймаутом (не блокируем редирект)
+    const getGeoData = async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 2000);
+        
+        const response = await fetch(`http://ip-api.com/json/${ip}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        
+        const data = await response.json();
+        if (data.status === 'success') {
+          click.country = data.country || 'Unknown';
+          click.city = data.city || 'Unknown';
+          click.region = data.regionName || 'Unknown';
+          await click.save();
+        }
+      } catch (error) {
+        click.country = 'Unknown';
+        click.city = 'Unknown';
+        click.region = 'Unknown';
+        await click.save().catch(() => {});
+      }
+    };
+
+    getGeoData();
+
+    // Увеличиваем счетчик в ссылке
+    await Link.updateOne(
+      { _id: link._id },
+      { $inc: { totalClicks: 1 } }
+    );
+
+    // Редирект СРАЗУ
+    res.redirect(302, link.originalUrl);
+  } catch (error) {
+    console.error('Ошибка редиректа:', error);
+    res.status(500).send('Ошибка сервера');
+  }
+});
+
+// Публичная статистика — только агрегаты, БЕЗ IP и user-agent
+router.get('/:shortCode+', async (req, res) => {
+  try {
+    const link = await Link.findOne({ shortCode: req.params.shortCode });
+    
     if (!link) {
       return res.status(404).json({ error: 'Ссылка не найдена' });
     }
+
+    // Считаем агрегаты на сервере
+    const stats = await Click.aggregate([
+      { $match: { linkId: link._id } },
+      {
+        $group: {
+          _id: null,
+          totalClicks: { $sum: 1 },
+          browsers: { $push: '$browser' },
+          osList: { $push: '$os' },
+          countries: { $push: '$country' },
+          cities: { $push: '$city' }
+        }
+      }
+    ]);
+
+    const result = stats[0] || { totalClicks: 0 };
+
+    // Агрегируем в объекты {значение: количество}
+    const countArray = (arr) => {
+      const count = {};
+      arr?.forEach(item => {
+        count[item] = (count[item] || 0) + 1;
+      });
+      return count;
+    };
 
     res.json({
       shortCode: link.shortCode,
       originalUrl: link.originalUrl,
-      totalClicks: link.clicks.length,
-      clicks: link.clicks,
-      createdAt: link.createdAt,
-      expiresAt: link.expiresAt,
-      customCode: link.customCode
+      totalClicks: result.totalClicks,
+      browsers: countArray(result.browsers),
+      os: countArray(result.osList),
+      countries: countArray(result.countries),
+      cities: countArray(result.cities)
+      // НЕТ IP, user-agent, точного времени, _id кликов
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Ошибка получения статистики:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// DELETE /api/links/:shortCode - удалить ссылку
-router.delete('/:shortCode', authMiddleware, async (req, res) => {
+// Удалить ссылку (soft delete)
+router.delete('/:id', async (req, res) => {
   try {
-    const link = await Link.findOneAndDelete({
-      shortCode: req.params.shortCode,
-      userId: req.user.userId
-    });
-
-    if (!link) {
-      return res.status(404).json({ error: 'Ссылка не найдена' });
-    }
-
+    await Link.updateOne(
+      { _id: req.params.id, userId: req.user.id },
+      { isActive: false }
+    );
     res.json({ message: 'Ссылка удалена' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
