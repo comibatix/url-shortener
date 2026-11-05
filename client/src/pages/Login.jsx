@@ -26,7 +26,7 @@ function Login() {
     setError('');
     try {
       const data = await login(email, password);
-      dispatch(setCredentials({ user: data.user, token: data.token }));
+      dispatch(setCredentials({ user: data.userId, token: data.token }));
       toast.success('Вход выполнен!');
       navigate('/');
     } catch (err) {

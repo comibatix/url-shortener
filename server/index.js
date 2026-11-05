@@ -26,7 +26,11 @@ mongoose.connect(process.env.MONGO_URI)
     process.exit(1);
   });
 
-// Роуты
+// Публичные роуты (редирект и статистика) — БЕЗ префикса /api
+const publicRoutes = require('./routes/public');
+app.use('/', publicRoutes);
+
+// API роуты — с префиксом /api
 const authRoutes = require('./routes/auth');
 const linkRoutes = require('./routes/links');
 

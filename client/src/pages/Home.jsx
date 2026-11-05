@@ -202,14 +202,14 @@ function Home() {
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
               <TextField 
                 fullWidth 
-                value={currentLink.shortUrl} 
+                value={`http://localhost:5000/${currentLink.shortCode}`} 
                 InputProps={{ readOnly: true }} 
                 size="small" 
               />
               <Button 
                 variant="contained" 
                 startIcon={<ContentCopyIcon />} 
-                onClick={() => copyToClipboard(currentLink.shortUrl)}
+                onClick={() => copyToClipboard(`http://localhost:5000/${currentLink.shortCode}`)}
                 sx={{ bgcolor: '#ffd700', color: '#0a0e27', '&:hover': { bgcolor: '#f5c518' } }}
               >
                 Копировать
@@ -222,14 +222,14 @@ function Home() {
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
               <TextField 
                 fullWidth 
-                value={currentLink.statsUrl} 
+                value={`http://localhost:5000/${currentLink.shortCode}/stats`} 
                 InputProps={{ readOnly: true }} 
                 size="small" 
               />
               <Button 
                 variant="contained" 
                 startIcon={<ContentCopyIcon />} 
-                onClick={() => copyToClipboard(currentLink.statsUrl)}
+                onClick={() => copyToClipboard(`http://localhost:5000/${currentLink.shortCode}/stats`)}
                 sx={{ bgcolor: '#ffd700', color: '#0a0e27', '&:hover': { bgcolor: '#f5c518' } }}
               >
                 Копировать
@@ -254,7 +254,7 @@ function Home() {
               
               {showQR && (
                 <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', p: 3, bgcolor: 'white', borderRadius: 2, boxShadow: 3, maxWidth: 260, margin: '20px auto 0' }}>
-                  <QRCodeSVG value={currentLink.shortUrl} size={200} />
+                  <QRCodeSVG value={`http://localhost:5000/${currentLink.shortCode}`} size={200} />
                 </Box>
               )}
             </Box>
