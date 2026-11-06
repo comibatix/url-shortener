@@ -1,12 +1,31 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto'); //  Для хэширования IP
 const Link = require('../models/Link');
 const Click = require('../models/Click');
 const UAParser = require('ua-parser-js');
+const rateLimit = require('express-rate-limit');
 
 //  Кэш для геоданных (IP -> данные), чтобы не превышать лимит 45 запросов/мин
 const geoCache = new Map();
 const CACHE_TTL = 60 * 60 * 1000; // 1 час
+
+//  Функция хэширования IP (SHA-256)
+const hashIP = (ip) => {
+  return crypto.createHash('sha256').update(ip).digest('hex');
+};
+
+//  Rate limit для публичных роутов (защита от перебора shortCode)
+const publicLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 минут
+  max: 100, // максимум 100 запросов с одного IP
+  message: { error: 'Слишком много запросов. Попробуйте позже.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Применяем rate limit ко всем публичным роутам
+router.use(publicLimiter);
 
 // Фоновая обработка клика (не блокирует редирект)
 async function processClickInBackground(linkId, ip, userAgent) {
@@ -30,7 +49,7 @@ async function processClickInBackground(linkId, ip, userAgent) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 секунды таймаут
         
-        // Используем HTTPS и запрашиваем только нужные поля
+        //  Используем HTTPS и запрашиваем только нужные поля
         const response = await fetch(`https://ip-api.com/json/${ip}?fields=status,country,regionName,city`, {
           signal: controller.signal
         });
@@ -52,14 +71,20 @@ async function processClickInBackground(linkId, ip, userAgent) {
       }
     }
 
-    // 3. Сохраняем клик в базу ОДИН раз
+    // 3.  Хэшируем IP перед сохранением
+    const hashedIP = hashIP(ip);
+
+    // 4.  Усекаем user-agent до 200 символов (было 500)
+    const truncatedUA = userAgent?.substring(0, 200) || '';
+
+    // 5. Сохраняем клик в базу ОДИН раз
     await Click.create({
       linkId,
-      ip,
+      ip: hashedIP, //  Теперь хэш, а не реальный IP
       browser: `${ua.browser.name || 'Unknown'} ${ua.browser.version || ''}`.trim(),
       os: `${ua.os.name || 'Unknown'} ${ua.os.version || ''}`.trim(),
       device: ua.device.type || 'desktop',
-      userAgent: userAgent?.substring(0, 500) || '',
+      userAgent: truncatedUA, //  Усечённый user-agent
       country,
       city,
       region
@@ -140,9 +165,9 @@ router.get('/:shortCode/stats', async (req, res) => {
       shortCode: link.shortCode,
       originalUrl: link.originalUrl,
       totalClicks: result.totalClicks,
-      createdAt: link.createdAt,     
-      expiresAt: link.expiresAt,     
-      customCode: link.customCode,   
+      createdAt: link.createdAt,
+      expiresAt: link.expiresAt,
+      customCode: link.customCode,
       browsers: countArray(result.browsers),
       os: countArray(result.osList),
       countries: countArray(result.countries),

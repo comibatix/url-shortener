@@ -49,7 +49,7 @@ export const createLink = (originalUrl, customCode = '', expiresIn = 0) =>
 export const getLinks = (url = '/api/links') => 
   request(url);
 
-// ✅ ИСПРАВЛЕНО: правильный путь к публичной статистике
+//   правильный путь к публичной статистике
 export const getLinkStats = (shortCode) => 
   request(`/${shortCode}/stats`);
 

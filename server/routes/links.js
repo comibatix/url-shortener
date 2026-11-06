@@ -33,7 +33,7 @@ router.post('/', authMiddleware, async (req, res) => {
       let isUnique = false;
       while (!isUnique) {
         shortCode = Math.random().toString(36).substring(2, 8);
-        // ✅ Проверяем только среди АКТИВНЫХ ссылок
+        //  Проверяем только среди АКТИВНЫХ ссылок
         const existing = await Link.findOne({ shortCode, isActive: true });
         if (!existing) {
           isUnique = true;

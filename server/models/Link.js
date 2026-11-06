@@ -17,7 +17,7 @@ const linkSchema = new mongoose.Schema({
   customCode: { type: Boolean, default: false }
 });
 
-// ✅ Частичный уникальный индекс: shortCode уникален ТОЛЬКО среди активных ссылок
+//  Частичный уникальный индекс: shortCode уникален ТОЛЬКО среди активных ссылок
 // Это позволяет переиспользовать код после того, как старая ссылка стала неактивной
 linkSchema.index({ shortCode: 1 }, { unique: true, partialFilterExpression: { isActive: true } });
 

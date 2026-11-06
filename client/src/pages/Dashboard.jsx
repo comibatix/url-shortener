@@ -36,7 +36,7 @@ function Dashboard() {
     dispatch(fetchLinks(searchQuery));
   }, [dispatch, searchQuery]);
 
-  // ✅ ИСПРАВЛЕНО: принимаем id вместо shortCode
+  //   принимаем id вместо shortCode
   const handleDelete = async (id) => {
     if (!window.confirm('Удалить ссылку?')) return;
     dispatch(removeLink(id));
@@ -127,7 +127,7 @@ function Dashboard() {
                     <Button 
                       variant="contained" 
                       startIcon={<DeleteIcon />}
-                      onClick={() => handleDelete(link._id)} //  ИСПРАВЛЕНО: передаём link._id
+                      onClick={() => handleDelete(link._id)} //   передаём link._id
                       color="error"
                     >
                       Удалить

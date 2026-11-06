@@ -59,7 +59,7 @@ function Stats() {
     });
   };
 
-  // ✅ Теперь мы берем данные из агрегированных объектов, а не из массива clicks
+  //  Теперь мы берем данные из агрегированных объектов, а не из массива clicks
   const browsersData = useMemo(() => formatAggregatedData(currentStats?.browsers), [currentStats]);
   const osData = useMemo(() => formatAggregatedData(currentStats?.os), [currentStats]);
   const countriesData = useMemo(() => formatAggregatedData(currentStats?.countries), [currentStats]);
