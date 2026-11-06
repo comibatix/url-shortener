@@ -8,7 +8,6 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import { fetchLinkStats, clearCurrentStats, clearError } from '../store/linksSlice';
-import { exportStatsToCSV } from '../api';
 
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
@@ -19,11 +18,9 @@ import Stack from '@mui/material/Stack';
 import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import DownloadIcon from '@mui/icons-material/Download';
 import QrCodeIcon from '@mui/icons-material/QrCode';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import BarChartIcon from '@mui/icons-material/BarChart';
-import ListAltIcon from '@mui/icons-material/ListAlt';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CodeIcon from '@mui/icons-material/Code';
 import LanguageIcon from '@mui/icons-material/Language';
@@ -32,6 +29,12 @@ import PublicIcon from '@mui/icons-material/Public';
 import { useTheme } from '@mui/material/styles';
 
 const COLORS = ['#2196f3', '#9c27b0', '#4caf50', '#ff5722', '#00bcd4', '#795548'];
+
+// Вспомогательная функция для преобразования объекта { "Chrome": 5 } в массив [{ name: "Chrome", value: 5 }]
+const formatAggregatedData = (dataObj) => {
+  if (!dataObj) return [];
+  return Object.entries(dataObj).map(([name, value]) => ({ name, value }));
+};
 
 function Stats() {
   const { shortCode } = useParams();
@@ -56,52 +59,11 @@ function Stats() {
     });
   };
 
-  const handleExportCSV = () => {
-    if (currentStats) {
-      exportStatsToCSV(currentStats);
-      toast.success('CSV файл скачан!');
-    }
-  };
-
-  const clicksByDate = useMemo(() => {
-    if (!currentStats?.clicks) return [];
-    const grouped = {};
-    currentStats.clicks.forEach(click => {
-      const date = new Date(click.date).toLocaleDateString('ru-RU');
-      grouped[date] = (grouped[date] || 0) + 1;
-    });
-    return Object.entries(grouped).map(([date, count]) => ({ date, count }));
-  }, [currentStats]);
-
-  const clicksByBrowser = useMemo(() => {
-    if (!currentStats?.clicks) return [];
-    const grouped = {};
-    currentStats.clicks.forEach(click => {
-      const browser = click.browser || 'Неизвестно';
-      grouped[browser] = (grouped[browser] || 0) + 1;
-    });
-    return Object.entries(grouped).map(([name, value]) => ({ name, value }));
-  }, [currentStats]);
-
-  const clicksByOS = useMemo(() => {
-    if (!currentStats?.clicks) return [];
-    const grouped = {};
-    currentStats.clicks.forEach(click => {
-      const os = click.os || 'Неизвестно';
-      grouped[os] = (grouped[os] || 0) + 1;
-    });
-    return Object.entries(grouped).map(([name, value]) => ({ name, value }));
-  }, [currentStats]);
-
-  const clicksByRegion = useMemo(() => {
-    if (!currentStats?.clicks) return [];
-    const grouped = {};
-    currentStats.clicks.forEach(click => {
-      const region = click.region || 'Неизвестно';
-      grouped[region] = (grouped[region] || 0) + 1;
-    });
-    return Object.entries(grouped).map(([name, value]) => ({ name, value }));
-  }, [currentStats]);
+  // ✅ Теперь мы берем данные из агрегированных объектов, а не из массива clicks
+  const browsersData = useMemo(() => formatAggregatedData(currentStats?.browsers), [currentStats]);
+  const osData = useMemo(() => formatAggregatedData(currentStats?.os), [currentStats]);
+  const countriesData = useMemo(() => formatAggregatedData(currentStats?.countries), [currentStats]);
+  const citiesData = useMemo(() => formatAggregatedData(currentStats?.cities), [currentStats]);
 
   if (loading) return <Typography align="center" sx={{ mt: 8 }}>Загрузка...</Typography>;
   if (error) return <Container maxWidth="md" sx={{ mt: 6 }}><Alert severity="error">{error}</Alert></Container>;
@@ -130,10 +92,12 @@ function Stats() {
               <Typography variant="body1"><strong>Всего кликов:</strong></Typography>
               <Typography variant="body1">{currentStats.totalClicks}</Typography>
             </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider', pb: 1 }}>
-              <Typography variant="body1"><strong>Создана:</strong></Typography>
-              <Typography variant="body1">{new Date(currentStats.createdAt).toLocaleString('ru-RU')}</Typography>
-            </Box>
+            {currentStats.createdAt && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider', pb: 1 }}>
+                <Typography variant="body1"><strong>Создана:</strong></Typography>
+                <Typography variant="body1">{new Date(currentStats.createdAt).toLocaleString('ru-RU')}</Typography>
+              </Box>
+            )}
             {currentStats.expiresAt && (
               <Box sx={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider', pb: 1 }}>
                 <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AccessTimeIcon fontSize="small" /><strong>Истекает:</strong></Typography>
@@ -156,14 +120,6 @@ function Stats() {
               sx={{ bgcolor: '#ffd700', color: '#0a0e27', '&:hover': { bgcolor: '#f5c518' } }}
             >
               Копировать ссылку
-            </Button>
-            <Button 
-              variant="contained" 
-              startIcon={<DownloadIcon />}
-              onClick={handleExportCSV}
-              sx={{ bgcolor: '#27ae60', '&:hover': { bgcolor: '#219a52' } }}
-            >
-              Скачать CSV
             </Button>
             <Button 
               variant="outlined"
@@ -189,22 +145,6 @@ function Stats() {
         </Typography>
       ) : (
         <>
-          <Card elevation={3} sx={{ p: 4, mb: 4 }}>
-            <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <BarChartIcon /> Клики по дням
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={clicksByDate}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="count" fill="#2196f3" name="Клики" />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 3, mb: 4 }}>
             
             <Card elevation={3} sx={{ p: 3 }}>
@@ -213,14 +153,8 @@ function Stats() {
               </Typography>
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie 
-                    data={clicksByBrowser} 
-                    cx="50%" 
-                    cy="50%" 
-                    outerRadius={80} 
-                    dataKey="value"
-                  >
-                    {clicksByBrowser.map((_, index) => (
+                  <Pie data={browsersData} cx="50%" cy="50%" outerRadius={80} dataKey="value">
+                    {browsersData.map((_, index) => (
                       <Cell key={index} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -236,14 +170,8 @@ function Stats() {
               </Typography>
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie 
-                    data={clicksByOS} 
-                    cx="50%" 
-                    cy="50%" 
-                    outerRadius={80} 
-                    dataKey="value"
-                  >
-                    {clicksByOS.map((_, index) => (
+                  <Pie data={osData} cx="50%" cy="50%" outerRadius={80} dataKey="value">
+                    {osData.map((_, index) => (
                       <Cell key={index} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -255,18 +183,12 @@ function Stats() {
 
             <Card elevation={3} sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <PublicIcon /> Регионы
+                <PublicIcon /> Страны
               </Typography>
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie 
-                    data={clicksByRegion} 
-                    cx="50%" 
-                    cy="50%" 
-                    outerRadius={80} 
-                    dataKey="value"
-                  >
-                    {clicksByRegion.map((_, index) => (
+                  <Pie data={countriesData} cx="50%" cy="50%" outerRadius={80} dataKey="value">
+                    {countriesData.map((_, index) => (
                       <Cell key={index} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -277,25 +199,10 @@ function Stats() {
             </Card>
           </Box>
 
-          <Card elevation={3} sx={{ p: 4 }}>
-            <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <ListAltIcon /> История кликов
-            </Typography>
-            <Stack spacing={2}>
-              {currentStats.clicks.map((click, index) => (
-                <Box key={index} sx={{ p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderRadius: 2 }}>
-                  <Typography variant="body2"><strong>Дата:</strong> {new Date(click.date).toLocaleString('ru-RU')}</Typography>
-                  <Typography variant="body2"><strong>Браузер:</strong> {click.browser}</Typography>
-                  <Typography variant="body2"><strong>ОС:</strong> {click.os}</Typography>
-                  <Typography variant="body2"><strong>Устройство:</strong> {click.device}</Typography>
-                  <Typography variant="body2"><strong>IP:</strong> {click.ip}</Typography>
-                  <Typography variant="body2"><strong>Регион:</strong> {click.region || 'Неизвестно'}</Typography>
-                  <Typography variant="body2"><strong>Страна:</strong> {click.country || 'Неизвестно'}</Typography>
-                  <Typography variant="body2"><strong>Город:</strong> {click.city || 'Неизвестно'}</Typography>
-                </Box>
-              ))}
-            </Stack>
-          </Card>
+          {/* 
+            Примечание: Раздел "История кликов" удалён, так как теперь мы отдаём 
+            только агрегированные данные для защиты приватности пользователей (IP, точное время).
+          */}
         </>
       )}
 

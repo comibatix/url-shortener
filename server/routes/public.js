@@ -4,6 +4,71 @@ const Link = require('../models/Link');
 const Click = require('../models/Click');
 const UAParser = require('ua-parser-js');
 
+//  Кэш для геоданных (IP -> данные), чтобы не превышать лимит 45 запросов/мин
+const geoCache = new Map();
+const CACHE_TTL = 60 * 60 * 1000; // 1 час
+
+// Фоновая обработка клика (не блокирует редирект)
+async function processClickInBackground(linkId, ip, userAgent) {
+  try {
+    const parser = new UAParser(userAgent);
+    const ua = parser.getResult();
+
+    let country = 'Unknown';
+    let city = 'Unknown';
+    let region = 'Unknown';
+
+    // 1. Проверяем кэш
+    const cached = geoCache.get(ip);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      country = cached.country;
+      city = cached.city;
+      region = cached.region;
+    } else {
+      // 2. Если нет в кэше, делаем запрос (с таймаутом и HTTPS)
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 секунды таймаут
+        
+        // Используем HTTPS и запрашиваем только нужные поля
+        const response = await fetch(`https://ip-api.com/json/${ip}?fields=status,country,regionName,city`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === 'success') {
+            country = data.country || 'Unknown';
+            city = data.city || 'Unknown';
+            region = data.regionName || 'Unknown';
+            
+            // Сохраняем в кэш
+            geoCache.set(ip, { country, city, region, timestamp: Date.now() });
+          }
+        }
+      } catch (err) {
+        console.log('Geo fetch failed or timed out, using defaults');
+      }
+    }
+
+    // 3. Сохраняем клик в базу ОДИН раз
+    await Click.create({
+      linkId,
+      ip,
+      browser: `${ua.browser.name || 'Unknown'} ${ua.browser.version || ''}`.trim(),
+      os: `${ua.os.name || 'Unknown'} ${ua.os.version || ''}`.trim(),
+      device: ua.device.type || 'desktop',
+      userAgent: userAgent?.substring(0, 500) || '',
+      country,
+      city,
+      region
+    });
+  } catch (error) {
+    console.error('Ошибка фонового сохранения клика:', error);
+  }
+}
+
 // Редирект по короткой ссылке (ПУБЛИЧНЫЙ)
 router.get('/:shortCode', async (req, res) => {
   try {
@@ -18,55 +83,18 @@ router.get('/:shortCode', async (req, res) => {
       return res.status(410).send('Ссылка истекла');
     }
 
-    const ip = req.ip || req.connection.remoteAddress;
+    //  req.ip теперь работает корректно благодаря trust proxy в index.js
+    const ip = req.ip || '0.0.0.0';
 
-    const parser = new UAParser(req.headers['user-agent']);
-    const ua = parser.getResult();
+    // 1. Сразу увеличиваем счетчик (быстро)
+    Link.updateOne({ _id: link._id }, { $inc: { totalClicks: 1 } }).catch(console.error);
 
-    const click = new Click({
-      linkId: link._id,
-      ip: ip,
-      browser: `${ua.browser.name || 'Unknown'} ${ua.browser.version || ''}`.trim(),
-      os: `${ua.os.name || 'Unknown'} ${ua.os.version || ''}`.trim(),
-      device: ua.device.type || 'desktop',
-      userAgent: req.headers['user-agent']?.substring(0, 500) || ''
-    });
-
-    click.save().catch(err => console.error('Ошибка сохранения клика:', err));
-
-    const getGeoData = async () => {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 2000);
-        
-        const response = await fetch(`http://ip-api.com/json/${ip}`, {
-          signal: controller.signal
-        });
-        clearTimeout(timeout);
-        
-        const data = await response.json();
-        if (data.status === 'success') {
-          click.country = data.country || 'Unknown';
-          click.city = data.city || 'Unknown';
-          click.region = data.regionName || 'Unknown';
-          await click.save();
-        }
-      } catch (error) {
-        click.country = 'Unknown';
-        click.city = 'Unknown';
-        click.region = 'Unknown';
-        await click.save().catch(() => {});
-      }
-    };
-
-    getGeoData();
-
-    await Link.updateOne(
-      { _id: link._id },
-      { $inc: { totalClicks: 1 } }
-    );
-
+    // 2.  СРАЗУ делаем редирект (пользователь не ждет гео-запрос)
     res.redirect(302, link.originalUrl);
+
+    // 3.  Обрабатываем клик и гео в фоне (не блокируя ответ)
+    processClickInBackground(link._id, ip, req.headers['user-agent']);
+
   } catch (error) {
     console.error('Ошибка редиректа:', error);
     res.status(500).send('Ошибка сервера');
@@ -101,7 +129,9 @@ router.get('/:shortCode/stats', async (req, res) => {
     const countArray = (arr) => {
       const count = {};
       arr?.forEach(item => {
-        count[item] = (count[item] || 0) + 1;
+        if (item) { // Защита от null/undefined
+          count[item] = (count[item] || 0) + 1;
+        }
       });
       return count;
     };
@@ -110,6 +140,9 @@ router.get('/:shortCode/stats', async (req, res) => {
       shortCode: link.shortCode,
       originalUrl: link.originalUrl,
       totalClicks: result.totalClicks,
+      createdAt: link.createdAt,     
+      expiresAt: link.expiresAt,     
+      customCode: link.customCode,   
       browsers: countArray(result.browsers),
       os: countArray(result.osList),
       countries: countArray(result.countries),

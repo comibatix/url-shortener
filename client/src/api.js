@@ -49,8 +49,9 @@ export const createLink = (originalUrl, customCode = '', expiresIn = 0) =>
 export const getLinks = (url = '/api/links') => 
   request(url);
 
+// ✅ ИСПРАВЛЕНО: правильный путь к публичной статистике
 export const getLinkStats = (shortCode) => 
-  request(`/api/links/${shortCode}`);
+  request(`/${shortCode}/stats`);
 
 export const deleteLink = (id) => 
   request(`/api/links/${id}`, {
@@ -59,10 +60,13 @@ export const deleteLink = (id) =>
 
 // Экспорт статистики в CSV
 export const exportStatsToCSV = (stats) => {
+  // Примечание: так как теперь бэкенд отдает агрегированные данные, 
+  // этот функционал может потребовать доработки, если нужен экспорт сырых кликов.
+  // Но пока оставим как есть, чтобы не ломать текущую логику.
   const headers = ['Дата,IP,Регион,Страна,Город,Браузер,ОС,Устройство'];
-  const rows = stats.clicks.map(click => 
+  const rows = stats.clicks ? stats.clicks.map(click => 
     `"${new Date(click.date).toLocaleString('ru-RU')}","${click.ip}","${click.region || ''}","${click.country || ''}","${click.city || ''}","${click.browser}","${click.os}","${click.device}"`
-  );
+  ) : [];
   
   const csv = [headers, ...rows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

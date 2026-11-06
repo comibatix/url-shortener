@@ -1,13 +1,16 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const rateLimit = require('express-rate-limit'); // ⚠️ Добавили rate limit
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 // Защита от NoSQL инъекций
 mongoose.set('sanitizeFilter', true);
 
 const app = express();
+
+// Доверяем первому прокси (Nginx), чтобы req.ip показывал реальный IP клиента
+app.set('trust proxy', 1);
 
 // Middleware
 app.use(cors());
@@ -19,7 +22,7 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your_super_secret_key
   process.exit(1);
 }
 
-// ⚠️ НАСТРОЙКА RATE LIMIT для авторизации (10 попыток за 15 минут)
+// НАСТРОЙКА RATE LIMIT для авторизации
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
   max: 10, // максимум 10 запросов с одного IP
@@ -40,7 +43,7 @@ mongoose.connect(process.env.MONGO_URI)
 const publicRoutes = require('./routes/public');
 app.use('/', publicRoutes);
 
-// ⚠️ ПРИМЕНЯЕМ RATE LIMIT к роутам авторизации
+// ПРИМЕНЯЕМ RATE LIMIT к роутам авторизации
 app.use('/api/auth', authLimiter);
 
 // API роуты — с префиксом /api
