@@ -30,13 +30,11 @@ function Dashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
 
   useEffect(() => {
     dispatch(fetchLinks(searchQuery));
   }, [dispatch, searchQuery]);
 
-  //   принимаем id вместо shortCode
   const handleDelete = async (id) => {
     if (!window.confirm('Удалить ссылку?')) return;
     dispatch(removeLink(id));
@@ -69,16 +67,13 @@ function Dashboard() {
         Мои ссылки
       </Typography>
 
-      <TextField
-        fullWidth
-        placeholder="Поиск по URL или коду..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        sx={{ mb: 4 }}
-        InputProps={{
-          startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-        }}
-      />
+<TextField
+  fullWidth
+  placeholder="Поиск по URL или коду..."
+  value={searchQuery}
+  onChange={(e) => setSearchQuery(e.target.value)}
+  sx={{ mb: 4 }}
+/>
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
       
@@ -108,7 +103,7 @@ function Dashboard() {
                       Истекает: {new Date(link.expiresAt).toLocaleString('ru-RU')}
                     </Alert>
                   )}
-                  <Stack direction="row" spacing={1} justifyContent="flex-end" flexWrap="wrap">
+                  <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                     <Button 
                       variant="contained" 
                       startIcon={<ContentCopyIcon />}
@@ -127,7 +122,7 @@ function Dashboard() {
                     <Button 
                       variant="contained" 
                       startIcon={<DeleteIcon />}
-                      onClick={() => handleDelete(link._id)} //   передаём link._id
+                      onClick={() => handleDelete(link._id)}
                       color="error"
                     >
                       Удалить

@@ -7,7 +7,10 @@ const clickSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  ip: String,
+  ip: {
+    type: String,
+    required: true
+  },
   browser: String,
   os: String,
   device: String,
@@ -25,7 +28,7 @@ const clickSchema = new mongoose.Schema({
   },
   userAgent: {
     type: String,
-    maxlength: 500
+    maxlength: 200  //  Согласовано с обрезкой в public.js
   },
   date: {
     type: Date,
@@ -34,6 +37,7 @@ const clickSchema = new mongoose.Schema({
   }
 });
 
-clickSchema.index({ linkId: 1, date: 1 });
+//  Составной индекс: сначала по ссылке, потом по дате (новые сверху)
+clickSchema.index({ linkId: 1, date: -1 });
 
 module.exports = mongoose.model('Click', clickSchema);
