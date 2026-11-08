@@ -222,14 +222,14 @@ function Home() {
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
               <TextField 
                 fullWidth 
-                value={`http://localhost:5000/${currentLink.shortCode}/stats`} 
+                value={`http://localhost:5000/${currentLink.shortCode}+`} 
                 InputProps={{ readOnly: true }} 
                 size="small" 
               />
               <Button 
                 variant="contained" 
                 startIcon={<ContentCopyIcon />} 
-                onClick={() => copyToClipboard(`http://localhost:5000/${currentLink.shortCode}/stats`)}
+                onClick={() => copyToClipboard(`http://localhost:5000/${currentLink.shortCode}+`)}
                 sx={{ bgcolor: '#ffd700', color: '#0a0e27', '&:hover': { bgcolor: '#f5c518' } }}
               >
                 Копировать

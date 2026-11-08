@@ -4,6 +4,18 @@ const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
+
+//  ЗАЩИТА ОТ ПЕРЕБОРА: Rate limit для auth роутов (20 попыток за 15 минут)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 20, 
+  message: { error: 'Слишком много попыток. Попробуйте позже.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.use(authLimiter);
 
 // Middleware для обработки ошибок валидации
 const handleValidationErrors = (req, res, next) => {
@@ -16,15 +28,8 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-// Валидация email
-const isValidEmail = (email) => {
-  return typeof email === 'string' && 
-         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-};
-
 // Регистрация
 router.post('/register', 
-  // Валидация схемы
   [
     body('email')
       .isString().withMessage('Email должен быть строкой')
@@ -33,7 +38,7 @@ router.post('/register',
       .isLength({ min: 1, max: 254 }).withMessage('Email слишком длинный'),
     body('password')
       .isString().withMessage('Пароль должен быть строкой')
-      .isLength({ min: 6 }).withMessage('Пароль должен быть минимум 6 символов')
+      .isLength({ min: 6 }).withMessage('Пароль должен быть не менее 6 символов')
       .trim()
   ],
   handleValidationErrors,
@@ -41,19 +46,20 @@ router.post('/register',
     try {
       const { email, password } = req.body;
 
-      // Приводим к нижнему регистру (после normalizeEmail)
+      //  ЯВНАЯ ПРОВЕРКА ТИПА (защита от NoSQL инъекций)
+      if (typeof email !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ error: 'Неверный формат данных' });
+      }
+
       const normalizedEmail = email.toLowerCase();
 
-      // Проверяем, существует ли пользователь
       const existingUser = await User.findOne({ email: normalizedEmail });
       if (existingUser) {
         return res.status(400).json({ error: 'Пользователь уже существует' });
       }
 
-      // Хэшируем пароль
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Создаем пользователя
       const user = new User({
         email: normalizedEmail,
         password: hashedPassword
@@ -71,7 +77,6 @@ router.post('/register',
 
 // Логин
 router.post('/login',
-  // Валидация схемы
   [
     body('email')
       .isString().withMessage('Email должен быть строкой')
@@ -80,7 +85,7 @@ router.post('/login',
       .isLength({ min: 1, max: 254 }).withMessage('Email слишком длинный'),
     body('password')
       .isString().withMessage('Пароль должен быть строкой')
-      .isLength({ min: 6 }).withMessage('Пароль должен быть минимум 6 символов')
+      .isLength({ min: 6 }).withMessage('Пароль должен быть не менее 6 символов')
       .trim()
   ],
   handleValidationErrors,
@@ -88,22 +93,23 @@ router.post('/login',
     try {
       const { email, password } = req.body;
 
-      // Приводим к нижнему регистру (после normalizeEmail)
+      //  ЯВНАЯ ПРОВЕРКА ТИПА (защита от NoSQL инъекций)
+      if (typeof email !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ error: 'Неверный формат данных' });
+      }
+
       const normalizedEmail = email.toLowerCase();
 
-      // Ищем пользователя
       const user = await User.findOne({ email: normalizedEmail });
       if (!user) {
         return res.status(400).json({ error: 'Неверный email или пароль' });
       }
 
-      // Проверяем пароль
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
         return res.status(400).json({ error: 'Неверный email или пароль' });
       }
 
-      // Создаем JWT токен
       const token = jwt.sign(
         { userId: user._id },
         process.env.JWT_SECRET,

@@ -16,7 +16,6 @@ import Alert from '@mui/material/Alert';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import DeleteIcon from '@mui/icons-material/Delete';
-import SearchIcon from '@mui/icons-material/Search';
 import Pagination from '@mui/material/Pagination';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { useTheme } from '@mui/material/styles';
@@ -67,13 +66,13 @@ function Dashboard() {
         Мои ссылки
       </Typography>
 
-<TextField
-  fullWidth
-  placeholder="Поиск по URL или коду..."
-  value={searchQuery}
-  onChange={(e) => setSearchQuery(e.target.value)}
-  sx={{ mb: 4 }}
-/>
+      <TextField
+        fullWidth
+        placeholder="Поиск по URL или коду..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        sx={{ mb: 4 }}
+      />
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
       
@@ -112,6 +111,7 @@ function Dashboard() {
                     >
                       Копировать
                     </Button>
+                    {/* Это внутренний маршрут React, он не виден как публичная ссылка */}
                     <Button 
                       variant="contained" 
                       startIcon={<BarChartIcon />}

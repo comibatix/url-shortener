@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   try {
     // Получаем токен из заголовка Authorization
     const authHeader = req.headers.authorization;
@@ -19,8 +20,20 @@ const authMiddleware = (req, res, next) => {
     // Проверяем токен
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
+    //  ПРОВЕРКА: существует ли пользователь в базе
+    const user = await User.findById(decoded.userId).select('-password');
+    
+    if (!user) {
+      return res.status(401).json({ error: 'Пользователь не найден' });
+    }
+    
+    //  ПРОВЕРКА: активен ли пользователь
+    if (!user.isActive) {
+      return res.status(401).json({ error: 'Аккаунт деактивирован' });
+    }
+    
     // Добавляем информацию о пользователе в request
-    req.user = decoded;
+    req.user = user;
     
     // Передаём управление следующему middleware/роуту
     next();

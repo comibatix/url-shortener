@@ -4,25 +4,41 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
-// Защита от NoSQL инъекций
-mongoose.set('sanitizeFilter', true);
-
 const app = express();
 
-// Доверяем первому прокси (Nginx), чтобы req.ip показывал реальный IP клиента
+//  1. НАСТРОЙКИ MONGOOSE (ДО подключения)
+// Защита от NoSQL инъекций (вторая линия защиты по требованию ментора)
+mongoose.set('sanitizeFilter', true);
+
+//  2. ДОВЕРИЕ ПРОКСИ
+// Доверяем первому прокси (Nginx/Heroku), чтобы req.ip показывал реальный IP клиента
 app.set('trust proxy', 1);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Проверка JWT_SECRET на старте
-if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your_super_secret_key_change_me') {
-  console.error('❌ ОШИБКА: JWT_SECRET не настроен! Проверь файл .env');
-  process.exit(1);
+//  3. ПРОВЕРКА JWT_SECRET НА СТАРТЕ (требование ментора)
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your_super_secret_key_change_this') {
+  console.error('');
+  console.error('❌ ════════════════════════════════════════════════════════');
+  console.error('❌ ОШИБКА: JWT_SECRET не настроен или использует заглушку!');
+  console.error('❌ ════════════════════════════════════════════════════════');
+  console.error('Создайте файл server/.env и добавьте:');
+  console.error('JWT_SECRET=ваш_секретный_ключ_минимум_32_символа');
+  console.error('');
+  process.exit(1); // Останавливаем сервер, если секрета нет
 }
 
-// НАСТРОЙКА RATE LIMIT для авторизации
+//  4. ПОДКЛЮЧЕНИЕ К MONGODB (ИСПРАВЛЕНА ЦЕПОЧКА ПРОМИСОВ)
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ MongoDB подключен'))
+  .catch(err => {
+    console.error('❌ Ошибка подключения к MongoDB:', err);
+    process.exit(1);
+  });
+
+//  5. НАСТРОЙКА RATE LIMIT для авторизации (защита от перебора)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
   max: 10, // максимум 10 запросов с одного IP
@@ -31,29 +47,21 @@ const authLimiter = rateLimit({
   legacyHeaders: false, 
 });
 
-// Подключение к MongoDB
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB подключен'))
-  .catch(err => {
-    console.error('❌ Ошибка подключения к MongoDB:', err);
-    process.exit(1);
-  });
-
+//  6. ПОДКЛЮЧЕНИЕ РОУТОВ
 // Публичные роуты (редирект и статистика) — БЕЗ префикса /api
 const publicRoutes = require('./routes/public');
 app.use('/', publicRoutes);
 
-// ПРИМЕНЯЕМ RATE LIMIT к роутам авторизации
+// Применяем Rate Limit ТОЛЬКО к роутам авторизации
 app.use('/api/auth', authLimiter);
 
-// API роуты — с префиксом /api
 const authRoutes = require('./routes/auth');
 const linkRoutes = require('./routes/links');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/links', linkRoutes);
 
-// Базовый роут
+// Базовый роут для проверки работы API
 app.get('/', (req, res) => {
   res.json({ message: 'URL Shortener API работает' });
 });

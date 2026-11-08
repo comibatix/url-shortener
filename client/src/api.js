@@ -49,20 +49,20 @@ export const createLink = (originalUrl, customCode = '', expiresIn = 0) =>
 export const getLinks = (url = '/api/links') => 
   request(url);
 
-//   правильный путь к публичной статистике
+//  явно указываем, что ждём JSON, чтобы сервер не делал редирект
 export const getLinkStats = (shortCode) => 
-  request(`/${shortCode}/stats`);
+  request(`/${shortCode}+`, {
+    headers: {
+      'Accept': 'application/json'
+    }
+  });
 
 export const deleteLink = (id) => 
   request(`/api/links/${id}`, {
     method: 'DELETE',
   });
 
-// Экспорт статистики в CSV
 export const exportStatsToCSV = (stats) => {
-  // Примечание: так как теперь бэкенд отдает агрегированные данные, 
-  // этот функционал может потребовать доработки, если нужен экспорт сырых кликов.
-  // Но пока оставим как есть, чтобы не ломать текущую логику.
   const headers = ['Дата,IP,Регион,Страна,Город,Браузер,ОС,Устройство'];
   const rows = stats.clicks ? stats.clicks.map(click => 
     `"${new Date(click.date).toLocaleString('ru-RU')}","${click.ip}","${click.region || ''}","${click.country || ''}","${click.city || ''}","${click.browser}","${click.os}","${click.device}"`

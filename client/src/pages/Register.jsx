@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import { setCredentials } from '../store/authSlice';
+import { clearLinks } from '../store/linksSlice';
 import { register } from '../api';
 
 import Container from '@mui/material/Container';
@@ -24,12 +25,20 @@ function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    
+    //  УДАЛЯЕМ СТАРЫЙ ТОКЕН
+    localStorage.removeItem('token');
+    
     if (password.length < 6) {
       toast.error('Пароль должен быть не менее 6 символов');
       return;
     }
     try {
       const data = await register(email, password);
+      
+      //  УДАЛЯЕМ СТАРЫЕ ССЫЛКИ ИЗ REDUX
+      dispatch(clearLinks());
+      
       dispatch(setCredentials({ user: data.user, token: data.token }));
       toast.success('Регистрация успешна!');
       navigate('/');

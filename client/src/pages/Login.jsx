@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import { setCredentials } from '../store/authSlice';
+import { clearLinks } from '../store/linksSlice';
 import { login } from '../api';
 
 import Container from '@mui/material/Container';
@@ -24,8 +25,16 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    
+    //  УДАЛЯЕМ СТАРЫЙ ТОКЕН
+    localStorage.removeItem('token');
+    
     try {
       const data = await login(email, password);
+      
+      //  УДАЛЯЕМ СТАРЫЕ ССЫЛКИ ИЗ REDUX
+      dispatch(clearLinks());
+      
       dispatch(setCredentials({ user: data.userId, token: data.token }));
       toast.success('Вход выполнен!');
       navigate('/');
