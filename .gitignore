@@ -22,3 +22,6 @@ Thumbs.db
 # Временные файлы очистки истории
 bfg-*.jar
 url-shortener-mirror.git/
+
+# База геолокации MaxMind (скачивается локально)
+server/*.mmdb

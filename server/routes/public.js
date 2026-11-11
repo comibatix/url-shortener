@@ -5,30 +5,36 @@ const Link = require('../models/Link');
 const Click = require('../models/Click');
 const UAParser = require('ua-parser-js');
 const rateLimit = require('express-rate-limit');
+const maxmind = require('maxmind'); 
 
-// Кэш для геоданных (IP -> данные)
-const geoCache = new Map();
-const CACHE_TTL = 60 * 60 * 1000; // 1 час
+// переменная и функция для загрузки базы при старте сервера
+let geoLookup = null;
 
-// Функция хэширования IP (SHA-256)
+async function initGeoLookup() {
+  if (!geoLookup) {
+    try {
+      // Путь к файлу относительно папки server
+      geoLookup = await maxmind.open('./GeoLite2-City.mmdb');
+      console.log('✅ База геолокации GeoLite2 успешно загружена локально');
+    } catch (error) {
+      console.error('❌ Не удалось загрузить базу GeoLite2. Убедитесь, что файл GeoLite2-City.mmdb лежит в папке server/. Ошибка:', error.message);
+    }
+  }
+}
+
+// Запускаем инициализацию сразу при загрузке файла
+initGeoLookup();
+
+// Функция хэширования IP (SHA-256) - осталась без изменений
 const hashIP = (ip) => {
   return crypto.createHash('sha256').update(ip).digest('hex');
 };
 
-//  Функция анонимизации IP для сторонних API (защита приватности)
-// Превращает "192.168.1.45" в "192.168.1.0", скрывая точный адрес от ip-api.com
-const getAnonymizedIpForApi = (ip) => {
-  if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
-    return '8.8.8.8'; // Заглушка для локальной разработки, чтобы ip-api не возвращал ошибку
-  }
-  // Скрываем последний октет для IPv4
-  return ip.replace(/\.\d+$/, '.0');
-};
 
-
-// Фоновая обработка клика
+// новая версия функции с локальным поиском
 async function processClickInBackground(linkId, ip, userAgent) {
   try {
+
     const parser = new UAParser(userAgent);
     const ua = parser.getResult();
 
@@ -36,35 +42,20 @@ async function processClickInBackground(linkId, ip, userAgent) {
     let city = 'Unknown';
     let region = 'Unknown';
 
-    const cached = geoCache.get(ip);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      country = cached.country;
-      city = cached.city;
-      region = cached.region;
-    } else {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+    // Пропускаем локальные IP (но мы их уже подменили выше, если они были локальными)
+    if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
+      if (geoLookup) {
+        const response = geoLookup.get(ip);
         
-        //  Используем анонимизированный IP для запроса к стороннему сервису
-        const apiIp = getAnonymizedIpForApi(ip);
-        
-        const response = await fetch(`https://ip-api.com/json/${apiIp}?fields=status,country,regionName,city`, {
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.status === 'success') {
-            country = data.country || 'Unknown';
-            city = data.city || 'Unknown';
-            region = data.regionName || 'Unknown';
-            geoCache.set(ip, { country, city, region, timestamp: Date.now() });
-          }
+        if (response) {
+          country = response.country?.names?.ru || response.country?.names?.en || 'Unknown';
+          city = response.city?.names?.ru || response.city?.names?.en || 'Unknown';
+          region = response.subdivisions?.[0]?.names?.ru || response.subdivisions?.[0]?.names?.en || 'Unknown';
+        } else {
+          console.warn(`⚠️ Геоданные не найдены в базе для IP: ${ip}`);
         }
-      } catch (err) {
-        console.log('Geo fetch failed or timed out, using defaults');
+      } else {
+        console.warn('⚠️ База геолокации не инициализирована. Проверьте наличие файла .mmdb');
       }
     }
 
@@ -87,11 +78,11 @@ async function processClickInBackground(linkId, ip, userAgent) {
   }
 }
 
-// Единый публичный роут
+// Единый публичный роут (остался без изменений)
 router.get('/:shortCode', async (req, res) => {
   let shortCode = req.params.shortCode;
 
-  //  УМНАЯ ОБРАБОТКА "+": 
+  // УМНАЯ ОБРАБОТКА "+": 
   if (shortCode.endsWith('+')) {
     const codeWithoutPlus = shortCode.slice(0, -1);
     const link = await Link.findOne({ shortCode: codeWithoutPlus });
@@ -100,7 +91,7 @@ router.get('/:shortCode', async (req, res) => {
       return res.status(404).json({ error: 'Ссылка не найдена' });
     }
     
-    //  Проверяем: есть ли токен авторизации ИЛИ явно запрошен JSON
+    // Проверяем: есть ли токен авторизации ИЛИ явно запрошен JSON
     const isApiRequest = req.headers.authorization || 
                          (req.headers.accept && req.headers.accept.includes('application/json'));
     
@@ -144,11 +135,11 @@ router.get('/:shortCode', async (req, res) => {
       });
     }
     
-    // Если запрос из обычного браузера (без токена и без Accept: json) — редирект на красивую страницу
+    // Если запрос из обычного браузера — редирект на красивую страницу
     return res.redirect(302, `http://localhost:5173/stats/${codeWithoutPlus}`);
   }
 
-  //  ОБЫЧНЫЙ РЕДИРЕКТ (без "+")
+  // ОБЫЧНЫЙ РЕДИРЕКТ (без "+")
   try {
     const link = await Link.findOne({ shortCode });
     
@@ -164,6 +155,8 @@ router.get('/:shortCode', async (req, res) => {
     const ip = req.ip || '0.0.0.0';
     Link.updateOne({ _id: link._id }, { $inc: { totalClicks: 1 } }).catch(console.error);
     res.redirect(302, link.originalUrl);
+    
+    // Запускаем фоновую обработку (теперь она использует локальную базу)
     processClickInBackground(link._id, ip, req.headers['user-agent']);
 
   } catch (error) {
