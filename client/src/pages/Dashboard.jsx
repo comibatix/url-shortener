@@ -28,11 +28,20 @@ function Dashboard() {
   const { links, loading, error } = useSelector((state) => state.links);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const theme = useTheme();
+ 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery); // Ждем 500мс и только потом обновляем debouncedSearch
+    }, 500);
+
+    return () => clearTimeout(timer); // Если нажали новую кнопку, сбрасываем старый таймер
+  }, [searchQuery]);
 
   useEffect(() => {
-    dispatch(fetchLinks(searchQuery));
-  }, [dispatch, searchQuery]);
+    dispatch(fetchLinks(debouncedSearch)); 
+  }, [dispatch, debouncedSearch]);  
 
   const handleDelete = async (id) => {
     if (!window.confirm('Удалить ссылку?')) return;

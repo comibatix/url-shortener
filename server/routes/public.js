@@ -25,16 +25,6 @@ const getAnonymizedIpForApi = (ip) => {
   return ip.replace(/\.\d+$/, '.0');
 };
 
-// Rate limit для публичных роутов
-const publicLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: 'Слишком много запросов. Попробуйте позже.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-router.use(publicLimiter);
 
 // Фоновая обработка клика
 async function processClickInBackground(linkId, ip, userAgent) {

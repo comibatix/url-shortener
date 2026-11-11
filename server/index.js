@@ -11,8 +11,13 @@ const app = express();
 mongoose.set('sanitizeFilter', true);
 
 //  2. ДОВЕРИЕ ПРОКСИ
-// Доверяем первому прокси (Nginx/Heroku), чтобы req.ip показывал реальный IP клиента
-app.set('trust proxy', 1);
+//  Доверяем прокси ТОЛЬКО если это явно разрешено в .env
+if (process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+  console.log('✅ Trust proxy включён (сервер работает за Nginx/прокси)');
+} else {
+  console.log('ℹ️ Trust proxy отключён (локальный запуск, защита от подделки IP)');
+}
 
 // Middleware
 app.use(cors());
@@ -78,27 +83,46 @@ mongoose.connect(process.env.MONGO_URI)
   });
 
 //  5. НАСТРОЙКА RATE LIMIT для авторизации (защита от перебора)
+//  1. СТРОГИЙ лимит для входа и регистрации (защита от взлома пароля)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
-  max: 10, // максимум 10 запросов с одного IP
-  message: { error: 'Слишком много попыток. Попробуйте позже.' },
-  standardHeaders: true, 
-  legacyHeaders: false, 
+  max: 10, // всего 10 попыток
+  message: { error: 'Слишком много попыток входа. Попробуйте позже.' },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
-//  6. ПОДКЛЮЧЕНИЕ РОУТОВ
-// Публичные роуты (редирект и статистика) — БЕЗ префикса /api
+//  2. МЯГКИЙ лимит для переходов по коротким ссылкам (с запасом для офисов)
+const redirectLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 минут
+  max: 200, // 200 переходов (с запасом, чтобы не блокировать обычных пользователей)
+  message: 'Слишком много переходов. Попробуйте позже.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+//  3. УМЕРЕННЫЙ лимит для API (создание ссылок, дашборд)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 минут
+  max: 60, // 60 запросов к API
+  message: { error: 'Слишком много запросов к API. Попробуйте позже.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+//  6. ПОДКЛЮЧЕНИЕ РОУТОВ С ПРАВИЛЬНЫМИ ЛИМИТАМИ
+
+// 1. Публичные редиректы (только мягкий лимит)
 const publicRoutes = require('./routes/public');
-app.use('/', publicRoutes);
+app.use('/', redirectLimiter, publicRoutes); 
 
-// Применяем Rate Limit ТОЛЬКО к роутам авторизации
-app.use('/api/auth', authLimiter);
-
+// 2. Авторизация (строгий лимит)
 const authRoutes = require('./routes/auth');
-const linkRoutes = require('./routes/links');
+app.use('/api/auth', authLimiter, authRoutes); 
 
-app.use('/api/auth', authRoutes);
-app.use('/api/links', linkRoutes);
+// 3. API ссылок (умеренный лимит)
+const linkRoutes = require('./routes/links');
+app.use('/api/links', apiLimiter, linkRoutes); 
 
 // Базовый роут для проверки работы API
 app.get('/', (req, res) => {
