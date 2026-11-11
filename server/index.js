@@ -18,16 +18,55 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 
-//  3. ПРОВЕРКА JWT_SECRET НА СТАРТЕ (требование ментора)
-if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your_super_secret_key_change_this') {
+//  3. СТРОГАЯ ПРОВЕРКА JWT_SECRET НА СТАРТЕ 
+
+// Список запрещённых (известных) секретов
+const INVALID_SECRETS = [
+  'your_super_secret_key_change_this',
+  'your_super_secret_key_change_me',
+  'secret',
+  '123456',
+  'password',
+  'jwt_secret',
+  'your_jwt_secret',
+  'change_me',
+  'change_this',
+];
+
+// Проверка 1: Существует ли JWT_SECRET?
+if (!process.env.JWT_SECRET) {
   console.error('');
-  console.error('❌ ════════════════════════════════════════════════════════');
-  console.error('❌ ОШИБКА: JWT_SECRET не настроен или использует заглушку!');
+  console.error('❌ ═══════════════════════════════════════════════════════');
+  console.error('❌ ОШИБКА: JWT_SECRET не настроен!');
   console.error('❌ ════════════════════════════════════════════════════════');
   console.error('Создайте файл server/.env и добавьте:');
-  console.error('JWT_SECRET=ваш_секретный_ключ_минимум_32_символа');
+  console.error('JWT_SECRET=<сгенерируйте через: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))">');
   console.error('');
-  process.exit(1); // Останавливаем сервер, если секрета нет
+  process.exit(1); // Остановить сервер
+}
+
+// Проверка 2: Длина секрета (минимум 32 символа)
+if (process.env.JWT_SECRET.length < 32) {
+  console.error('');
+  console.error(' ════════════════════════════════════════════════════════');
+  console.error('❌ ОШИБКА: JWT_SECRET слишком короткий (минимум 32 символа)!');
+  console.error('❌ ════════════════════════════════════════════════════════');
+  console.error('Сгенерируйте новый секрет:');
+  console.error('node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  console.error('');
+  process.exit(1); // Остановить сервер
+}
+
+// Проверка 3: Не является ли секрет известной заглушкой?
+if (INVALID_SECRETS.includes(process.env.JWT_SECRET)) {
+  console.error('');
+  console.error('❌ ════════════════════════════════════════════════════════');
+  console.error('❌ ОШИБКА: JWT_SECRET использует известную заглушку!');
+  console.error('❌ ════════════════════════════════════════════════════════');
+  console.error('Сгенерируйте уникальный секрет:');
+  console.error('node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  console.error('');
+  process.exit(1); // Остановить сервер
 }
 
 //  4. ПОДКЛЮЧЕНИЕ К MONGODB (ИСПРАВЛЕНА ЦЕПОЧКА ПРОМИСОВ)
