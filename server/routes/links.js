@@ -71,7 +71,7 @@ router.post('/', authMiddleware, async (req, res) => {
       let isUnique = false;
       while (!isUnique) {
         shortCode = Math.random().toString(36).substring(2, 8);
-        const existing = await Link.findOne({ shortCode, isActive: true });
+        const existing = await Link.findOne({ shortCode });
         if (!existing) {
           isUnique = true;
         }
@@ -90,7 +90,7 @@ router.post('/', authMiddleware, async (req, res) => {
     res.status(201).json(link);
   } catch (error) {
     if (error.code === 11000) {
-      return res.status(400).json({ error: 'Этот код уже занят активной ссылкой' });
+      return res.status(400).json({ error: 'Этот короткий код уже занят. Пожалуйста, выберите другой.' });
     }
     console.error('❌ Ошибка создания ссылки:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
