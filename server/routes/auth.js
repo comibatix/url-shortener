@@ -65,9 +65,21 @@ router.post('/register',
         password: hashedPassword
       });
 
-      await user.save();
+            await user.save();
 
-      res.status(201).json({ message: 'Пользователь создан' });
+      //  1. Создаём JWT токен для нового пользователя
+      const token = jwt.sign(
+        { userId: user._id },        // Внутри токена храним ID пользователя
+        process.env.JWT_SECRET,      // Подписываем нашим секретным ключом
+        { expiresIn: '7d' }          // Токен будет действителен 7 дней
+      );
+
+      //  2. Отправляем клиенту сообщение, токен и ID пользователя
+      res.status(201).json({ 
+        message: 'Пользователь создан',
+        token,
+        userId: user._id 
+      });
     } catch (error) {
       console.error('Ошибка регистрации:', error);
       res.status(500).json({ error: 'Ошибка сервера' });

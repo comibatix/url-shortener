@@ -39,7 +39,7 @@ function Register() {
       //  УДАЛЯЕМ СТАРЫЕ ССЫЛКИ ИЗ REDUX
       dispatch(clearLinks());
       
-      dispatch(setCredentials({ user: data.user, token: data.token }));
+      dispatch(setCredentials({ user: data.userId, token: data.token }));
       toast.success('Регистрация успешна!');
       navigate('/');
     } catch (err) {
