@@ -62,11 +62,27 @@ router.get('/:id/clicks', authMiddleware, async (req, res) => {
 // Создать новую ссылку
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { originalUrl, customCode, expiresAt } = req.body;
+    // 1. Получаем expiresIn (дни) вместо expiresAt
+    const { originalUrl, customCode, expiresIn } = req.body;
+    
+    // 2. ВАЛИДАЦИЯ: разрешаем только 0, 7, 30 или 90 дней
+    const allowedDurations = [0, 7, 30, 90];
+    const parsedExpiresIn = parseInt(expiresIn, 10);
+    
+    if (!allowedDurations.includes(parsedExpiresIn)) {
+      return res.status(400).json({ error: 'Недопустимый срок действия. Разрешено: 0, 7, 30 или 90 дней.' });
+    }
+
+    // 3. ВЫЧИСЛЯЕМ дату истечения НА СЕРВЕРЕ
+    let calculatedExpiresAt = null;
+    if (parsedExpiresIn > 0) {
+      // Текущее время + (количество дней * 24 часа * 60 минут * 60 секунд * 1000 мс)
+      calculatedExpiresAt = new Date(Date.now() + parsedExpiresIn * 24 * 60 * 60 * 1000);
+    }
     
     let shortCode = customCode;
     
-    // Если код не предоставлен, генерируем уникальный среди АКТИВНЫХ ссылок
+    // Если код не предоставлен, генерируем уникальный
     if (!shortCode) {
       let isUnique = false;
       while (!isUnique) {
@@ -83,7 +99,7 @@ router.post('/', authMiddleware, async (req, res) => {
       originalUrl,
       shortCode,
       customCode: !!customCode,
-      expiresAt: expiresAt ? new Date(expiresAt) : null
+      expiresAt: calculatedExpiresAt // 4. Используем вычисленную сервером дату
     });
     
     await link.save();
@@ -93,25 +109,6 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Этот короткий код уже занят. Пожалуйста, выберите другой.' });
     }
     console.error('❌ Ошибка создания ссылки:', error);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
-
-// Удалить ссылку (soft delete)
-router.delete('/:id', authMiddleware, async (req, res) => {
-  try {
-    const result = await Link.updateOne(
-      { _id: req.params.id, userId: req.user.id },
-      { isActive: false }
-    );
-    
-    if (result.modifiedCount === 0 && result.nModified === 0) {
-      return res.status(404).json({ error: 'Ссылка не найдена или уже удалена' });
-    }
-    
-    res.json({ message: 'Ссылка удалена' });
-  } catch (error) {
-    console.error('❌ Ошибка удаления ссылки:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
