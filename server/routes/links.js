@@ -1,49 +1,75 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Link = require('../models/Link');
-const Click = require('../models/Click'); //  Добавили для пагинации кликов
+const Click = require('../models/Click');
 const authMiddleware = require('../middleware/auth');
 
-// Получить все ссылки пользователя (ТОЛЬКО активные)
+// GET /api/links — список ссылок пользователя с безопасным поиском
+// Получить все ссылки пользователя с поддержкой безопасного поиска
 router.get('/', authMiddleware, async (req, res) => {
-  try {
-    //  .lean() возвращает обычные JS-объекты, а не Mongoose-документы
-    const links = await Link.find({ userId: req.user.id })
-      .select('-clicks')  //  Явно исключаем clicks на уровне MongoDB
-      .sort({ createdAt: -1 })
-      .lean();  // преобразуем в обычные объекты
-    
-    // Фильтруем на уровне JavaScript: показываем только активные
-    const activeLinks = links.filter(link => link.isActive !== false);
-    
-    res.json(activeLinks);
-  } catch (error) {
-    console.error('Ошибка получения ссылок:', error);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
+try {
+const { search } = req.query; // 1. Параметр поиска из URL
+
+// 2. Базовый фильтр: только ссылки этого пользователя (без операторов!)
+const query = { userId: req.user.id };
+
+// 3. Если есть поиск — добавляем его безопасно
+if (search && search.trim() !== '') {
+// Экранируем спецсимволы регулярных выражений (требование ментора)
+const escapedSearch = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Создаём объект RegExp — sanitizeFilter его НЕ трогает, всё безопасно
+const regex = new RegExp(escapedSearch, 'i');
+query.$or = [
+{ originalUrl: regex },
+{ shortCode: regex }
+];
+}
+
+const links = await Link.find(query)
+.sort({ createdAt: -1 })
+.lean();
+
+// 4. Возвращаем фильтрацию isActive на JavaScript (как было раньше)
+const activeLinks = links.filter(link => link.isActive !== false);
+res.json(activeLinks);
+} catch (error) {
+console.error('Ошибка получения ссылок:', error);
+res.status(500).json({ error: 'Ошибка сервера' });
+}
 });
 
-//  НОВЫЙ РОУТ: Получить историю кликов постранично (только для владельца)
-router.get('/:id/clicks', authMiddleware, async (req, res) => {
+// GET /api/links/:idOrCode/clicks — история кликов с пагинацией (только для владельца)
+
+router.get('/:idOrCode/clicks', authMiddleware, async (req, res) => {
   try {
+    const { idOrCode } = req.params;
     const { page = 1, limit = 50 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    // 1. Проверяем, что ссылка существует и принадлежит пользователю
-    const link = await Link.findOne({ _id: req.params.id, userId: req.user.id });
+    // 1. Сначала пробуем найти по _id (если это валидный ObjectId)
+    let link = null;
+    if (mongoose.isValidObjectId(idOrCode)) {
+      link = await Link.findOne({ _id: idOrCode, userId: req.user.id });
+    }
+    // 2. Если по _id не нашли — ищем по shortCode
+    if (!link) {
+      link = await Link.findOne({ shortCode: idOrCode, userId: req.user.id });
+    }
+
     if (!link) {
       return res.status(404).json({ error: 'Ссылка не найдена' });
     }
 
-    // 2. Получаем общее количество кликов для расчёта пагинации
+    // 3. Общее количество кликов для пагинации
     const totalClicks = await Click.countDocuments({ linkId: link._id });
 
-    // 3. Получаем клики с пагинацией и сортировкой по дате (новые сверху)
+    // 4. Сами клики: новые сверху, с пагинацией
     const clicks = await Click.find({ linkId: link._id })
-      .sort({ date: -1 }) // Используем составной индекс { linkId: 1, date: -1 }
+      .sort({ date: -1 })
       .skip(skip)
       .limit(Number(limit))
-      .select('-_id'); // Убираем _id самого клика для чистоты ответа
+      .select('-_id');
 
     res.json({
       shortCode: link.shortCode,
@@ -59,16 +85,16 @@ router.get('/:id/clicks', authMiddleware, async (req, res) => {
   }
 });
 
-// Создать новую ссылку
+// POST /api/links — создать новую ссылку (БЕЗ ИЗМЕНЕНИЙ — твой код из пункта 7)
 router.post('/', authMiddleware, async (req, res) => {
   try {
     // 1. Получаем expiresIn (дни) вместо expiresAt
     const { originalUrl, customCode, expiresIn } = req.body;
-    
+
     // 2. ВАЛИДАЦИЯ: разрешаем только 0, 7, 30 или 90 дней
     const allowedDurations = [0, 7, 30, 90];
     const parsedExpiresIn = parseInt(expiresIn, 10);
-    
+
     if (!allowedDurations.includes(parsedExpiresIn)) {
       return res.status(400).json({ error: 'Недопустимый срок действия. Разрешено: 0, 7, 30 или 90 дней.' });
     }
@@ -76,12 +102,11 @@ router.post('/', authMiddleware, async (req, res) => {
     // 3. ВЫЧИСЛЯЕМ дату истечения НА СЕРВЕРЕ
     let calculatedExpiresAt = null;
     if (parsedExpiresIn > 0) {
-      // Текущее время + (количество дней * 24 часа * 60 минут * 60 секунд * 1000 мс)
       calculatedExpiresAt = new Date(Date.now() + parsedExpiresIn * 24 * 60 * 60 * 1000);
     }
-    
+
     let shortCode = customCode;
-    
+
     // Если код не предоставлен, генерируем уникальный
     if (!shortCode) {
       let isUnique = false;
@@ -93,15 +118,15 @@ router.post('/', authMiddleware, async (req, res) => {
         }
       }
     }
-    
+
     const link = new Link({
       userId: req.user.id,
       originalUrl,
       shortCode,
       customCode: !!customCode,
-      expiresAt: calculatedExpiresAt // 4. Используем вычисленную сервером дату
+      expiresAt: calculatedExpiresAt
     });
-    
+
     await link.save();
     res.status(201).json(link);
   } catch (error) {
@@ -109,6 +134,24 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Этот короткий код уже занят. Пожалуйста, выберите другой.' });
     }
     console.error('❌ Ошибка создания ссылки:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// DELETE /api/links/:id — удалить ссылку (soft delete)
+
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const result = await Link.updateOne(
+      { _id: req.params.id, userId: req.user.id },
+      { isActive: false }
+    );
+    if (result.modifiedCount === 0 && result.nModified === 0) {
+      return res.status(404).json({ error: 'Ссылка не найдена или уже удалена' });
+    }
+    res.json({ message: 'Ссылка удалена' });
+  } catch (error) {
+    console.error('❌ Ошибка удаления ссылки:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });

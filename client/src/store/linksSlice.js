@@ -1,7 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { getLinks, createLink, deleteLink, getLinkStats } from '../api';
+import { getLinks, createLink, deleteLink, getLinkStats, getLinkClicks } from '../api';
 
-// Async thunk для получения списка ссылок
 export const fetchLinks = createAsyncThunk(
   'links/fetchLinks',
   async (searchQuery = '', { rejectWithValue }) => {
@@ -15,7 +14,6 @@ export const fetchLinks = createAsyncThunk(
   }
 );
 
-// Async thunk для создания ссылки
 export const addLink = createAsyncThunk(
   'links/addLink',
   async ({ originalUrl, customCode, expiresIn }, { rejectWithValue }) => {
@@ -28,7 +26,6 @@ export const addLink = createAsyncThunk(
   }
 );
 
-// Async thunk для удаления ссылки
 export const removeLink = createAsyncThunk(
   'links/removeLink',
   async (id, { rejectWithValue }) => {
@@ -41,7 +38,6 @@ export const removeLink = createAsyncThunk(
   }
 );
 
-// Async thunk для получения статистики
 export const fetchLinkStats = createAsyncThunk(
   'links/fetchLinkStats',
   async (shortCode, { rejectWithValue }) => {
@@ -54,12 +50,26 @@ export const fetchLinkStats = createAsyncThunk(
   }
 );
 
+//  Thunk для получения истории кликов
+export const fetchLinkClicks = createAsyncThunk(
+  'links/fetchLinkClicks',
+  async ({ shortCode, page, limit }, { rejectWithValue }) => {
+    try {
+      const data = await getLinkClicks(shortCode, page, limit);
+      return data;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 const linksSlice = createSlice({
   name: 'links',
   initialState: {
     links: [],
     currentLink: null,
-    currentStats: null, // ✅ Добавлено для статистики
+    currentStats: null,
+    clickHistory: null, 
     loading: false,
     error: null,
   },
@@ -68,7 +78,10 @@ const linksSlice = createSlice({
       state.currentLink = null;
     },
     clearCurrentStats: (state) => {
-      state.currentStats = null; // ✅ Очищает статистику при переходе
+      state.currentStats = null;
+    },
+    clearClickHistory: (state) => { 
+      state.clickHistory = null;
     },
     clearError: (state) => {
       state.error = null;
@@ -77,49 +90,32 @@ const linksSlice = createSlice({
       state.links = [];
       state.currentLink = null;
       state.currentStats = null;
+      state.clickHistory = null;
       state.error = null;
     }
   },
   extraReducers: (builder) => {
     builder
-      // fetchLinks
-      .addCase(fetchLinks.pending, (state) => {
-        state.loading = true;
-        state.error = null;
+      .addCase(fetchLinks.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchLinks.fulfilled, (state, action) => { state.loading = false; state.links = action.payload; })
+      .addCase(fetchLinks.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+      
+      .addCase(addLink.fulfilled, (state, action) => { state.currentLink = action.payload; })
+      
+      .addCase(removeLink.fulfilled, (state, action) => { 
+        state.links = state.links.filter(link => link._id !== action.payload); 
       })
-      .addCase(fetchLinks.fulfilled, (state, action) => {
-        state.loading = false;
-        state.links = action.payload;
-      })
-      .addCase(fetchLinks.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-      // addLink
-      .addCase(addLink.fulfilled, (state, action) => {
-        state.currentLink = action.payload;
-      })
-      // removeLink
-      .addCase(removeLink.fulfilled, (state, action) => {
-        state.links = state.links.filter(link => link._id !== action.payload);
-      })
-      // fetchLinkStats
-      .addCase(fetchLinkStats.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(fetchLinkStats.fulfilled, (state, action) => {
-        state.loading = false;
-        state.currentStats = action.payload;
-      })
-      .addCase(fetchLinkStats.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      });
+      
+      .addCase(fetchLinkStats.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchLinkStats.fulfilled, (state, action) => { state.loading = false; state.currentStats = action.payload; })
+      .addCase(fetchLinkStats.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+
+      // Обработка истории кликов
+      .addCase(fetchLinkClicks.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchLinkClicks.fulfilled, (state, action) => { state.loading = false; state.clickHistory = action.payload; })
+      .addCase(fetchLinkClicks.rejected, (state, action) => { state.loading = false; state.error = action.payload; });
   },
 });
 
-// ✅ Экспортируем ВСЕ действия, включая clearCurrentStats и clearLinks
-export const { clearCurrentLink, clearCurrentStats, clearError, clearLinks } = linksSlice.actions;
-
+export const { clearCurrentLink, clearCurrentStats, clearClickHistory, clearError, clearLinks } = linksSlice.actions;
 export default linksSlice.reducer;
