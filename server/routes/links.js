@@ -85,7 +85,7 @@ router.get('/:idOrCode/clicks', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/links — создать новую ссылку (БЕЗ ИЗМЕНЕНИЙ — твой код из пункта 7)
+
 router.post('/', authMiddleware, async (req, res) => {
   try {
     // 1. Получаем expiresIn (дни) вместо expiresAt
@@ -105,9 +105,25 @@ router.post('/', authMiddleware, async (req, res) => {
       calculatedExpiresAt = new Date(Date.now() + parsedExpiresIn * 24 * 60 * 60 * 1000);
     }
 
-    let shortCode = customCode;
+    let shortCode;
 
-    // Если код не предоставлен, генерируем уникальный
+    // ПРОВЕРКА КАСТОМНОГО КОДА НА СЕРВЕРЕ 
+    if (customCode) {
+      // Наш волшебный трафарет (регулярное выражение) от ментора
+      const codeRegex = /^[a-z0-9-]{3,32}$/;
+      
+      // Проверяем: если код НЕ проходит проверку трафаретом...
+      if (!codeRegex.test(customCode)) {
+        // ...мы сразу останавливаемся и отвечаем ошибкой 400
+        return res.status(400).json({ 
+          error: 'Кастомный код может содержать только строчные латинские буквы, цифры и дефис, длина от 3 до 32 символов.' 
+        });
+      }
+      // Если проверка пройдена, только тогда мы его принимаем
+      shortCode = customCode;
+    }
+
+    // Если код не предоставлен (или не прошел проверку, хотя мы бы уже ушли выше), генерируем уникальный
     if (!shortCode) {
       let isUnique = false;
       while (!isUnique) {
