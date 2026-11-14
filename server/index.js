@@ -92,14 +92,6 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-//  2. МЯГКИЙ лимит для переходов по коротким ссылкам (с запасом для офисов)
-const redirectLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 минут
-  max: 200, // 200 переходов (с запасом, чтобы не блокировать обычных пользователей)
-  message: 'Слишком много переходов. Попробуйте позже.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 //  3. УМЕРЕННЫЙ лимит для API (создание ссылок, дашборд)
 const apiLimiter = rateLimit({
@@ -114,7 +106,7 @@ const apiLimiter = rateLimit({
 
 // 1. Публичные редиректы (только мягкий лимит)
 const publicRoutes = require('./routes/public');
-app.use('/', redirectLimiter, publicRoutes); 
+app.use('/', publicRoutes); 
 
 // 2. Авторизация (строгий лимит)
 const authRoutes = require('./routes/auth');

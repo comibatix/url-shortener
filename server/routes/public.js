@@ -7,6 +7,15 @@ const UAParser = require('ua-parser-js');
 const rateLimit = require('express-rate-limit');
 const maxmind = require('maxmind'); 
 
+// Создаём лимитер ТОЛЬКО для этого файла (для редиректов)
+const redirectLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 минут
+  max: 200, // 200 переходов (с запасом для офисов)
+  message: 'Слишком много переходов. Попробуйте позже.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // переменная и функция для загрузки базы при старте сервера
 let geoLookup = null;
 
@@ -78,8 +87,8 @@ async function processClickInBackground(linkId, ip, userAgent) {
   }
 }
 
-// Единый публичный роут (остался без изменений)
-router.get('/:shortCode', async (req, res) => {
+// Единый публичный роут (теперь с точечным лимитером)
+router.get('/:shortCode', redirectLimiter, async (req, res) => {
   let shortCode = req.params.shortCode;
 
   // УМНАЯ ОБРАБОТКА "+": 
